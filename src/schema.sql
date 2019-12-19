@@ -4,12 +4,12 @@ DROP TABLE IF EXISTS vendor;
 
 DROP TABLE IF EXISTS customer;
 
-DROP TABLE IF EXISTS theme;
-
 CREATE TABLE admin (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
+    primary_color TEXT NOT NULL,
+    secondary_color TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -17,6 +17,8 @@ CREATE TABLE vendor (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
+    primary_color TEXT NOT NULL,
+    secondary_color TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -25,13 +27,8 @@ CREATE TABLE customer (
     email TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
     vendor_id INTEGER NOT NULL,
+    primary_color TEXT NOT NULL,
+    secondary_color TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (vendor_id) REFERENCES vendor (id)
 );
-
-CREATE TABLE theme (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id TEXT UNIQUE NOT NULL,
-    primary TEXT NOT NULL,
-    secondary TEXT NOT NULL
-)
