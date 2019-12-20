@@ -10,15 +10,46 @@ from src.db import get_db
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
 
+authenticated = []
+
 
 @bp.route('/check', methods=['POST'])
 def check_authenticated():
     if request.method == 'POST':
-        user_id = session.get('admin_id') or session.get(
-            'vendor_id') or session.get('customer_id')
+        data = request.get_json()
+        token = data['token']
+        userType = token[0:-1]
+        db = get_db()
 
-        if user_id is not None:
-            return jsonify(status="200", token=user_id)
+        if token in authenticated:
+            if userType == 'admin':
+                admin = db.execute(
+                    'SELECT * FROM admin WHERE id = ?', (token[-1],)).fetchone()
+
+                if admin is None:
+                    return jsonify(status="400", message="Unauthenticated")
+                else:
+                    return jsonify(status="200", colors=[admin['primary_color'], admin['secondary_color'], admin['accent']], token=token)
+            elif userType == 'vendor':
+                vendor = db.execute(
+                    'SELECT * FROM vendor WHERE id = ?', (token[-1],)).fetchone()
+
+                if vendor is None:
+                    return jsonify(status="400", message="Unauthenticated")
+                else:
+                    return jsonify(status="200", colors=[vendor['primary_color'], vendor['secondary_color'], vendor['accent']], token=token)
+            elif userType == 'customer':
+                customer = db.execute(
+                    'SELECT * FROM customer WHERE id = ?', (token[-1],)).fetchone()
+
+                if customer is None:
+                    return jsonify(status="400", message="Unauthenticated")
+                else:
+                    return jsonify(status="200", colors=[customer['primary_color'], customer['secondary_color'], customer['accent']], token=token)
+        else:
+            return jsonify(status="403")
+
+    return jsonify(status="500", message="Something went wrong")
 
 
 @bp.route('/logout')
@@ -27,7 +58,7 @@ def logout():
     return redirect(url_for('index'))
 
 
-@bp.route('/change-theme', methods=['POST'])
+@bp.route('/changetheme', methods=['POST'])
 def change_theme():
     if request.method == 'POST':
         data = request.get_json()
@@ -35,6 +66,7 @@ def change_theme():
         userType = data['userType']
         primary_color = data['primary_color']
         secondary_color = data['secondary_color']
+        accent = data['accent']
         db = get_db()
 
         if userType == 'admin':
@@ -44,10 +76,10 @@ def change_theme():
             if admin is None:
                 return jsonify(status="400", message="An error occurred while changing theme for user")
             else:
-                admin.primary_color = primary_color
-                admin.secondary_color = secondary_color
+                db.execute('UPDATE admin set primary_color = ?, secondary_color = ?, accent = ? where id = ?',
+                           (primary_color, secondary_color, accent, user_id[-1]))
                 db.commit()
-                return jsonify(status="200", message="Theme successfully changed.", primary_color=primary_color, secondary_color=secondary_color)
+                return jsonify(status="200", message="Theme successfully changed.", colors=[primary_color, secondary_color, accent])
         elif userType == 'vendor':
             vendor = db.execute(
                 'SELECT * FROM vendor WHERE id = ?', (user_id[-1],)).fetchone()
@@ -55,10 +87,10 @@ def change_theme():
             if vendor is None:
                 return jsonify(status="400", message="An error occurred while changing theme for user")
             else:
-                vendor.primary_color = primary_color
-                vendor.secondary_color = secondary_color
+                db.execute('UPDATE vendor set primary_color = ?, secondary_color = ?, accent = ? where id = ?',
+                           (primary_color, secondary_color, accent, user_id[-1]))
                 db.commit()
-                return jsonify(status="200", message="Theme successfully changed.", primary_color=primary_color, secondary_color=secondary_color)
+                return jsonify(status="200", message="Theme successfully changed.", colors=[primary_color, secondary_color, accent])
         elif userType == 'customer':
             customer = db.execute(
                 'SELECT * FROM customer WHERE id = ?', (user_id[-1],)).fetchone()
@@ -66,12 +98,12 @@ def change_theme():
             if customer is None:
                 return jsonify(status="400", message="An error occurred while changing theme for user")
             else:
-                customer.primary_color = primary_color
-                customer.secondary_color = secondary_color
+                db.execute('UPDATE customer set primary_color = ?, secondary_color = ?, accent = ? where id = ?',
+                           (primary_color, secondary_color, accent, user_id[-1]))
                 db.commit()
-                return jsonify(status="200", message="Theme successfully changed.", primary_color=primary_color, secondary_color=secondary_color)
+                return jsonify(status="200", message="Theme successfully changed.", colors=[primary_color, secondary_color, accent])
 
-        return jsonify(status="500", message="Something went wrong.")
+    return jsonify(status="500", message="Something went wrong.")
 
 
 @bp.route('/register', methods=['POST'])
@@ -91,8 +123,8 @@ def register():
             elif db.execute('SELECT id FROM admin WHERE email = ?', (email,)).fetchone() is not None:
                 return jsonify(status="409", message="{} is already registered".format(email))
             else:
-                db.execute('INSERT INTO admin (email, password, primary_color, secondary_color) VALUES (?, ?, ?, ?)',
-                           (email, generate_password_hash(password), '#FFFFFF', '#1E1E2D'))
+                db.execute('INSERT INTO admin (email, password, primary_color, secondary_color, accent) VALUES (?, ?, ?, ?, ?)',
+                           (email, generate_password_hash(password), '#FFFFFF', '#13131D', '#1E1E2D'))
                 db.commit()
                 return jsonify(status="200", message="Admin {} successfully created".format(email))
         elif userType == 'vendor':
@@ -103,8 +135,8 @@ def register():
             elif db.execute('SELECT id FROM vendor WHERE email = ?', (email,)).fetchone() is not None:
                 return jsonify(status="409", message="{} is already registered".format(email))
             else:
-                db.execute('INSERT INTO vendor (email, password, primary_color, secondary_color) VALUES (?, ?, ?, ?)',
-                           (email, generate_password_hash(password), '#03A9F4', '#0277BD'))
+                db.execute('INSERT INTO vendor (email, password, primary_color, secondary_color, accent) VALUES (?, ?, ?, ?, ?)',
+                           (email, generate_password_hash(password), '#03A9F4', '#0277BD', '#014972'))
                 db.commit()
                 return jsonify(status="200", message="Vendor {} successfully created".format(email))
         elif userType == 'customer':
@@ -118,8 +150,8 @@ def register():
             elif db.execute('SELECT id FROM customer WHERE email = ?', (email,)).fetchone() is not None:
                 return jsonify(status="409", message="{} is already registered".format(email))
             else:
-                db.execute('INSERT INTO customer (email, password, primary_color, secondary_color) VALUES (?, ?, ?, ?)',
-                           (email, generate_password_hash(password), '#FF5722', '#D84315'))
+                db.execute('INSERT INTO customer (email, password, primary_color, secondary_color, accent) VALUES (?, ?, ?, ?, ?)',
+                           (email, generate_password_hash(password), '#FF5722', '#D84315', '#922E10'))
                 db.commit()
                 return jsonify(status="200", message="Customer {} successfully created".format(email))
 
@@ -146,7 +178,8 @@ def login():
             else:
                 session.clear()
                 session['admin_id'] = 'admin' + str(admin['id'])
-                return jsonify(status="200", message="Admin {} logged in.".format(admin['email']), token='admin'+str(admin['id']), colors=[admin['primary_color'], admin['secondary_color']])
+                authenticated.append('admin' + str(admin['id']))
+                return jsonify(status="200", message="Admin {} logged in.".format(admin['email']), token='admin'+str(admin['id']), colors=[admin['primary_color'], admin['secondary_color'], admin['accent']])
         elif userType == 'vendor':
             vendor = db.execute(
                 'SELECT * FROM vendor WHERE email = ?', (email,)).fetchone()
@@ -158,7 +191,8 @@ def login():
             else:
                 session.clear()
                 session['vendor_id'] = 'vendor' + str(vendor['id'])
-                return jsonify(status="200", message="Vendor {} logged in.".format(vendor['email']), token='vendor'+str(vendor['id']), colors=[vendor['primary_color'], vendor['secondary_color']])
+                authenticated.append('vendor' + str(vendor['id']))
+                return jsonify(status="200", message="Vendor {} logged in.".format(vendor['email']), token='vendor'+str(vendor['id']), colors=[vendor['primary_color'], vendor['secondary_color'], vendor['accent']])
         elif userType == 'customer':
             customer = db.execute(
                 'SELECT * FROM customer WHERE email = ?', (email,)).fetchone()
@@ -170,6 +204,7 @@ def login():
             else:
                 session.clear()
                 session['customer_id'] = 'customer' + str(customer['id'])
-                return jsonify(status="200", message="Vendor {} logged in.".format(customer['email']), token='customer'+str(customer['id']), colors=[customer['primary_color'], customer['secondary_color']])
+                authenticated.append('customer' + str(customer['id']))
+                return jsonify(status="200", message="Vendor {} logged in.".format(customer['email']), token='customer'+str(customer['id']), colors=[customer['primary_color'], customer['secondary_color'], customer['accent']])
 
     return jsonify(status="500", message="Something went wrong.")
