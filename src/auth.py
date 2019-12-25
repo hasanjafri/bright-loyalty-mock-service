@@ -13,6 +13,124 @@ bp = Blueprint('auth', __name__, url_prefix='/auth')
 authenticated = []
 
 
+@bp.route('/loadTableData', methods=['GET'])
+def load_table_data():
+    barGraphOneData = [
+        {
+            'month': 'January',
+            'signups': 1000
+        },
+        {
+            'month': 'February',
+            'signups': 2000
+        },
+        {
+            'month': 'March',
+            'signups': 3100
+        },
+        {
+            'month': 'May',
+            'signups': 1400
+        },
+        {
+            'month': 'June',
+            'signups': 507
+        },
+        {
+            'month': 'July',
+            'signups': 684
+        },
+        {
+            'month': 'August',
+            'signups': 1257
+        },
+        {
+            'month': 'September',
+            'signups': 2035
+        },
+        {
+            'month': 'October',
+            'signups': 3333
+        },
+        {
+            'month': 'November',
+            'signups': 4123
+        },
+        {
+            'month': 'December',
+            'signups': 752
+        }
+    ]
+
+    barGraphTwoData = [
+        {
+            'vendorType': 'Applications',
+            'signups': 1000
+        },
+        {
+            'vendorType': 'Hardware',
+            'signups': 2000
+        },
+        {
+            'vendorType': 'Services',
+            'signups': 300
+        },
+        {
+            'vendorType': 'Software',
+            'signups': 4000
+        }
+    ]
+
+    barGraphThreeData = [
+        {
+            'month': 'January',
+            'signups': 10000
+        },
+        {
+            'month': 'February',
+            'signups': 20031
+        },
+        {
+            'month': 'March',
+            'signups': 30031
+        },
+        {
+            'month': 'May',
+            'signups': 4300
+        },
+        {
+            'month': 'June',
+            'signups': 5004
+        },
+        {
+            'month': 'July',
+            'signups': 6005
+        },
+        {
+            'month': 'August',
+            'signups': 7006
+        },
+        {
+            'month': 'September',
+            'signups': 5234
+        },
+        {
+            'month': 'October',
+            'signups': 1235
+        },
+        {
+            'month': 'November',
+            'signups': 2346
+        },
+        {
+            'month': 'December',
+            'signups': 3543
+        }
+    ]
+
+    return jsonify(status="200", data=[barGraphOneData, barGraphTwoData, barGraphThreeData])
+
+
 @bp.route('/check', methods=['POST'])
 def check_authenticated():
     if request.method == 'POST':
@@ -29,7 +147,7 @@ def check_authenticated():
                 if admin is None:
                     return jsonify(status="400", message="Unauthenticated")
                 else:
-                    return jsonify(status="200", colors=[admin['primary_color'], admin['secondary_color'], admin['accent']], token=token)
+                    return jsonify(status="200", colors=[admin['primary_color'], admin['secondary_color'], admin['accent']], token=token, email=admin['email'])
             elif userType == 'vendor':
                 vendor = db.execute(
                     'SELECT * FROM vendor WHERE id = ?', (token[-1],)).fetchone()
@@ -37,7 +155,7 @@ def check_authenticated():
                 if vendor is None:
                     return jsonify(status="400", message="Unauthenticated")
                 else:
-                    return jsonify(status="200", colors=[vendor['primary_color'], vendor['secondary_color'], vendor['accent']], token=token)
+                    return jsonify(status="200", colors=[vendor['primary_color'], vendor['secondary_color'], vendor['accent']], token=token, email=vendor['email'])
             elif userType == 'customer':
                 customer = db.execute(
                     'SELECT * FROM customer WHERE id = ?', (token[-1],)).fetchone()
@@ -45,7 +163,7 @@ def check_authenticated():
                 if customer is None:
                     return jsonify(status="400", message="Unauthenticated")
                 else:
-                    return jsonify(status="200", colors=[customer['primary_color'], customer['secondary_color'], customer['accent']], token=token)
+                    return jsonify(status="200", colors=[customer['primary_color'], customer['secondary_color'], customer['accent']], token=token, email=customer['email'])
         else:
             return jsonify(status="403")
 
@@ -150,8 +268,8 @@ def register():
             elif db.execute('SELECT id FROM customer WHERE email = ?', (email,)).fetchone() is not None:
                 return jsonify(status="409", message="{} is already registered".format(email))
             else:
-                db.execute('INSERT INTO customer (email, password, primary_color, secondary_color, accent) VALUES (?, ?, ?, ?, ?)',
-                           (email, generate_password_hash(password), '#FF5722', '#D84315', '#922E10'))
+                db.execute('INSERT INTO customer (email, password, vendor_id, primary_color, secondary_color, accent) VALUES (?, ?, ?, ?, ?, ?)',
+                           (email, generate_password_hash(password), vendor_id, '#FF5722', '#D84315', '#922E10'))
                 db.commit()
                 return jsonify(status="200", message="Customer {} successfully created".format(email))
 
@@ -179,7 +297,7 @@ def login():
                 session.clear()
                 session['admin_id'] = 'admin' + str(admin['id'])
                 authenticated.append('admin' + str(admin['id']))
-                return jsonify(status="200", message="Admin {} logged in.".format(admin['email']), token='admin'+str(admin['id']), colors=[admin['primary_color'], admin['secondary_color'], admin['accent']])
+                return jsonify(status="200", message="Admin {} logged in.".format(admin['email']), token='admin'+str(admin['id']), colors=[admin['primary_color'], admin['secondary_color'], admin['accent']], email=admin['email'])
         elif userType == 'vendor':
             vendor = db.execute(
                 'SELECT * FROM vendor WHERE email = ?', (email,)).fetchone()
@@ -189,10 +307,18 @@ def login():
             elif not check_password_hash(vendor['password'], password):
                 return jsonify(status="400", message="Incorrect Email or Password")
             else:
+                customer_token = ''
+
+                customer = db.execute(
+                    'SELECT * FROM customer WHERE vendor_id = ?', (vendor['id'],)).fetchone()
+
+                if customer is not None:
+                    customer_token = 'customer' + str(customer['id'])
+
                 session.clear()
                 session['vendor_id'] = 'vendor' + str(vendor['id'])
                 authenticated.append('vendor' + str(vendor['id']))
-                return jsonify(status="200", message="Vendor {} logged in.".format(vendor['email']), token='vendor'+str(vendor['id']), colors=[vendor['primary_color'], vendor['secondary_color'], vendor['accent']])
+                return jsonify(status="200", message="Vendor {} logged in.".format(vendor['email']), token='vendor'+str(vendor['id']), colors=[vendor['primary_color'], vendor['secondary_color'], vendor['accent']], alt_token=customer_token, email=vendor['email'])
         elif userType == 'customer':
             customer = db.execute(
                 'SELECT * FROM customer WHERE email = ?', (email,)).fetchone()
@@ -202,9 +328,17 @@ def login():
             elif not check_password_hash(customer['password'], password):
                 return jsonify(status="400", message="Incorrect Email or Password")
             else:
+                vendor_token = ''
+
+                vendor = db.execute(
+                    'SELECT * FROM vendor WHERE id = ?', (customer['vendor_id'],)).fetchone()
+
+                if vendor is not None:
+                    vendor_token = 'vendor' + str(vendor['id'])
+
                 session.clear()
                 session['customer_id'] = 'customer' + str(customer['id'])
                 authenticated.append('customer' + str(customer['id']))
-                return jsonify(status="200", message="Vendor {} logged in.".format(customer['email']), token='customer'+str(customer['id']), colors=[customer['primary_color'], customer['secondary_color'], customer['accent']])
+                return jsonify(status="200", message="Vendor {} logged in.".format(customer['email']), token='customer'+str(customer['id']), colors=[customer['primary_color'], customer['secondary_color'], customer['accent']], alt_token=vendor_token, email=customer['email'])
 
     return jsonify(status="500", message="Something went wrong.")
