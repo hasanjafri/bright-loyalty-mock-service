@@ -4,6 +4,8 @@ from flask import (
     Blueprint, flash, g, redirect, render_template, request, session, url_for, jsonify
 )
 
+from uuid import uuid4
+
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from src.db import get_db
@@ -136,10 +138,11 @@ def check_authenticated():
     if request.method == 'POST':
         data = request.get_json()
         token = data['token']
+        session_id = data['session_id']
         userType = token[0:-1]
         db = get_db()
 
-        if token in authenticated:
+        if session_id in authenticated:
             if userType == 'admin':
                 admin = db.execute(
                     'SELECT * FROM admin WHERE id = ?', (token[-1],)).fetchone()
@@ -147,7 +150,9 @@ def check_authenticated():
                 if admin is None:
                     return jsonify(status="400", message="Unauthenticated")
                 else:
-                    return jsonify(status="200", colors=[admin['primary_color'], admin['secondary_color'], admin['accent']], token=token, email=admin['email'])
+                    theme = db.execute(
+                        'SELECT * FROM theme WHERE admin_id = ?', (token[-1],)).fetchone()
+                    return jsonify(status="200", colors=[theme['primary_color'], theme['secondary_color'], theme['accent']], token=token, email=admin['email'], first_name=admin['first_name'], last_name=admin['last_name'])
             elif userType == 'vendor':
                 vendor = db.execute(
                     'SELECT * FROM vendor WHERE id = ?', (token[-1],)).fetchone()
@@ -155,15 +160,19 @@ def check_authenticated():
                 if vendor is None:
                     return jsonify(status="400", message="Unauthenticated")
                 else:
-                    return jsonify(status="200", colors=[vendor['primary_color'], vendor['secondary_color'], vendor['accent']], token=token, email=vendor['email'])
-            elif userType == 'customer':
-                customer = db.execute(
-                    'SELECT * FROM customer WHERE id = ?', (token[-1],)).fetchone()
+                    theme = db.execute(
+                        'SELECT * FROM theme WHERE vendor_id = ?', (token[-1],)).fetchone()
+                    return jsonify(status="200", colors=[theme['primary_color'], theme['secondary_color'], theme['accent']], token=token, email=vendor['email'], first_name=vendor['first_name'], last_name=vendor['last_name'])
+            elif userType == 'party':
+                party = db.execute(
+                    'SELECT * FROM party WHERE id = ?', (token[-1],)).fetchone()
 
-                if customer is None:
+                if party is None:
                     return jsonify(status="400", message="Unauthenticated")
                 else:
-                    return jsonify(status="200", colors=[customer['primary_color'], customer['secondary_color'], customer['accent']], token=token, email=customer['email'])
+                    theme = db.execute(
+                        'SELECT * FROM theme WHERE party_id = ?', (token[-1],)).fetchone()
+                    return jsonify(status="200", colors=[theme['primary_color'], theme['secondary_color'], theme['accent']], token=token, email=party['email'], first_name=party['first_name'], last_name=party['last_name'])
         else:
             return jsonify(status="403")
 
@@ -188,35 +197,35 @@ def change_theme():
         db = get_db()
 
         if userType == 'admin':
-            admin = db.execute(
-                'SELECT * FROM admin WHERE id = ?', (user_id[-1],)).fetchone()
+            theme = db.execute(
+                'SELECT * FROM theme WHERE admin_id = ?', (user_id[-1],)).fetchone()
 
-            if admin is None:
+            if theme is None:
                 return jsonify(status="400", message="An error occurred while changing theme for user")
             else:
-                db.execute('UPDATE admin set primary_color = ?, secondary_color = ?, accent = ? where id = ?',
+                db.execute('UPDATE theme set primary_color = ?, secondary_color = ?, accent = ? where admin_id = ?',
                            (primary_color, secondary_color, accent, user_id[-1]))
                 db.commit()
                 return jsonify(status="200", message="Theme successfully changed.", colors=[primary_color, secondary_color, accent])
         elif userType == 'vendor':
-            vendor = db.execute(
-                'SELECT * FROM vendor WHERE id = ?', (user_id[-1],)).fetchone()
+            theme = db.execute(
+                'SELECT * FROM theme WHERE vendor_id = ?', (user_id[-1],)).fetchone()
 
-            if vendor is None:
+            if theme is None:
                 return jsonify(status="400", message="An error occurred while changing theme for user")
             else:
-                db.execute('UPDATE vendor set primary_color = ?, secondary_color = ?, accent = ? where id = ?',
+                db.execute('UPDATE theme set primary_color = ?, secondary_color = ?, accent = ? where vendor_id = ?',
                            (primary_color, secondary_color, accent, user_id[-1]))
                 db.commit()
                 return jsonify(status="200", message="Theme successfully changed.", colors=[primary_color, secondary_color, accent])
-        elif userType == 'customer':
-            customer = db.execute(
-                'SELECT * FROM customer WHERE id = ?', (user_id[-1],)).fetchone()
+        elif userType == 'party':
+            theme = db.execute(
+                'SELECT * FROM theme WHERE party_id = ?', (user_id[-1],)).fetchone()
 
-            if customer is None:
+            if theme is None:
                 return jsonify(status="400", message="An error occurred while changing theme for user")
             else:
-                db.execute('UPDATE customer set primary_color = ?, secondary_color = ?, accent = ? where id = ?',
+                db.execute('UPDATE theme set primary_color = ?, secondary_color = ?, accent = ? where party_id = ?',
                            (primary_color, secondary_color, accent, user_id[-1]))
                 db.commit()
                 return jsonify(status="200", message="Theme successfully changed.", colors=[primary_color, secondary_color, accent])
@@ -231,6 +240,8 @@ def register():
         email = data['email']
         password = data['password']
         userType = data['userType']
+        first_name = data['first_name']
+        last_name = data['last_name']
         db = get_db()
 
         if userType == 'admin':
@@ -241,8 +252,13 @@ def register():
             elif db.execute('SELECT id FROM admin WHERE email = ?', (email,)).fetchone() is not None:
                 return jsonify(status="409", message="{} is already registered".format(email))
             else:
-                db.execute('INSERT INTO admin (email, password, primary_color, secondary_color, accent) VALUES (?, ?, ?, ?, ?)',
-                           (email, generate_password_hash(password), '#FFFFFF', '#13131D', '#1E1E2D'))
+                db.execute('INSERT INTO admin (email, password, first_name, last_name) VALUES (?, ?, ?, ?)',
+                           (email, generate_password_hash(password), first_name, last_name))
+                admin = db.execute(
+                    'SELECT * FROM admin WHERE email = ?', (email,)).fetchone()
+                if admin:
+                    db.execute('INSERT INTO theme (primary_color, secondary_color, accent, admin_id) VALUES (?, ?, ?, ?)',
+                               ('#FFFFFF', '#13131D', '#1E1E2D', admin['id']))
                 db.commit()
                 return jsonify(status="200", message="Admin {} successfully created".format(email))
         elif userType == 'vendor':
@@ -253,11 +269,16 @@ def register():
             elif db.execute('SELECT id FROM vendor WHERE email = ?', (email,)).fetchone() is not None:
                 return jsonify(status="409", message="{} is already registered".format(email))
             else:
-                db.execute('INSERT INTO vendor (email, password, primary_color, secondary_color, accent) VALUES (?, ?, ?, ?, ?)',
-                           (email, generate_password_hash(password), '#03A9F4', '#0277BD', '#014972'))
+                db.execute('INSERT INTO vendor (email, password, first_name, last_name) VALUES (?, ?, ?, ?)',
+                           (email, generate_password_hash(password), first_name, last_name))
+                vendor = db.execute(
+                    'SELECT * FROM vendor WHERE email = ?', (email,)).fetchone()
+                if vendor:
+                    db.execute('INSERT INTO theme (primary_color, secondary_color, accent, vendor_id) VALUES (?, ?, ?, ?)',
+                               ('#03A9F4', '#0277BD', '#014972', vendor['id']))
                 db.commit()
                 return jsonify(status="200", message="Vendor {} successfully created".format(email))
-        elif userType == 'customer':
+        elif userType == 'party':
             vendor_id = data['vendor_id']
             if not email:
                 return jsonify(status="400", message="Email is required")
@@ -265,15 +286,54 @@ def register():
                 return jsonify(status="400", message="Password is required")
             elif not vendor_id:
                 return jsonify(status="400", message="Vendor ID is required")
-            elif db.execute('SELECT id FROM customer WHERE email = ?', (email,)).fetchone() is not None:
+            elif db.execute('SELECT id FROM party WHERE email = ?', (email,)).fetchone() is not None:
                 return jsonify(status="409", message="{} is already registered".format(email))
             else:
-                db.execute('INSERT INTO customer (email, password, vendor_id, primary_color, secondary_color, accent) VALUES (?, ?, ?, ?, ?, ?)',
-                           (email, generate_password_hash(password), vendor_id, '#FF5722', '#D84315', '#922E10'))
+                db.execute('INSERT INTO party (email, password, first_name, last_name, vendor_id) VALUES (?, ?, ?, ?, ?)',
+                           (email, generate_password_hash(password), first_name, last_name, vendor_id))
+                party = db.execute(
+                    'SELECT * FROM party WHERE email = ?', (email,)).fetchone()
+                if party:
+                    db.execute('INSERT INTO theme (primary_color, secondary_color, accent, party_id) VALUES (?, ?, ?, ?)',
+                               ('#FF5722', '#D84315', '#922E10', party['id']))
                 db.commit()
-                return jsonify(status="200", message="Customer {} successfully created".format(email))
+                return jsonify(status="200", message="party {} successfully created".format(email))
 
     return jsonify(status="500", message="Something went wrong.")
+
+
+@bp.route('/loginAlt', methods=['POST'])
+def loginAlt():
+    if request.method == 'POST':
+        data = request.get_json()
+        email = data['email']
+        session_id = data['session_id']
+        token = data['token']
+        alt_token = data['alt_token']
+        userType = data['userType']
+        db = get_db()
+
+        if session_id in authenticated:
+            if userType == 'admin':
+                return jsonify(status="400", message="Invalid Request for UserType Admin")
+            elif userType == 'vendor':
+                party = db.execute(
+                    'SELECT * FROM party WHERE id = ?', (alt_token[-1],)).fetchone()
+
+                if party:
+                    theme = db.execute(
+                        'SELECT * FROM theme WHERE party_id = ?', (alt_token[-1],)).fetchone()
+                    return jsonify(status="200", colors=[theme['primary_color'], theme['secondary_color'], theme['accent']], first_name=party['first_name'], last_name=party['last_name'])
+            elif userType == 'party':
+                vendor = db.execute(
+                    'SELECT * FROM vendor WHERE id = ?', (alt_token[-1],)).fetchone()
+
+                if vendor:
+                    theme = db.execute(
+                        'SELECT * FROM theme WHERE vendor_id = ?', (alt_token[-1],)).fetchone()
+                    return jsonify(status="200", colors=[theme['primary_color'], theme['secondary_color'], theme['accent']], first_name=vendor['first_name'], last_name=vendor['last_name'])
+            else:
+                return jsonify(status="500", message="Something went wrong.")
 
 
 @bp.route('/login', methods=['POST'])
@@ -294,10 +354,14 @@ def login():
             elif not check_password_hash(admin['password'], password):
                 return jsonify(status="400", message="Incorrect Email or Password")
             else:
+                theme = db.execute(
+                    'SELECT * FROM theme WHERE admin_id = ?', (admin['id'],)).fetchone()
+
                 session.clear()
-                session['admin_id'] = 'admin' + str(admin['id'])
-                authenticated.append('admin' + str(admin['id']))
-                return jsonify(status="200", message="Admin {} logged in.".format(admin['email']), token='admin'+str(admin['id']), colors=[admin['primary_color'], admin['secondary_color'], admin['accent']], email=admin['email'])
+                session_id = uuid4()
+                session['admin_id'] = session_id
+                authenticated.append(session_id)
+                return jsonify(status="200", message="Admin {} logged in.".format(admin['email']), token='admin'+str(admin['id']), colors=[theme['primary_color'], theme['secondary_color'], theme['accent']], email=admin['email'], first_name=admin['first_name'], last_name=admin['last_name'], session_id=session_id)
         elif userType == 'vendor':
             vendor = db.execute(
                 'SELECT * FROM vendor WHERE email = ?', (email,)).fetchone()
@@ -307,38 +371,46 @@ def login():
             elif not check_password_hash(vendor['password'], password):
                 return jsonify(status="400", message="Incorrect Email or Password")
             else:
-                customer_token = ''
+                party_token = ''
 
-                customer = db.execute(
-                    'SELECT * FROM customer WHERE vendor_id = ?', (vendor['id'],)).fetchone()
+                party = db.execute(
+                    'SELECT * FROM party WHERE vendor_id = ?', (vendor['id'],)).fetchone()
 
-                if customer is not None:
-                    customer_token = 'customer' + str(customer['id'])
+                if party is not None:
+                    party_token = 'party' + str(party['id'])
+
+                theme = db.execute(
+                    'SELECT * FROM theme WHERE vendor_id = ?', (vendor['id'],)).fetchone()
 
                 session.clear()
-                session['vendor_id'] = 'vendor' + str(vendor['id'])
-                authenticated.append('vendor' + str(vendor['id']))
-                return jsonify(status="200", message="Vendor {} logged in.".format(vendor['email']), token='vendor'+str(vendor['id']), colors=[vendor['primary_color'], vendor['secondary_color'], vendor['accent']], alt_token=customer_token, email=vendor['email'])
-        elif userType == 'customer':
-            customer = db.execute(
-                'SELECT * FROM customer WHERE email = ?', (email,)).fetchone()
+                session_id = uuid4()
+                session['vendor_id'] = session_id
+                authenticated.append(session_id)
+                return jsonify(status="200", message="Vendor {} logged in.".format(vendor['email']), token='vendor'+str(vendor['id']), colors=[theme['primary_color'], theme['secondary_color'], theme['accent']], alt_token=party_token, email=vendor['email'], first_name=vendor['first_name'], last_name=vendor['last_name'], session_id=session_id)
+        elif userType == 'party':
+            party = db.execute(
+                'SELECT * FROM party WHERE email = ?', (email,)).fetchone()
 
-            if customer is None:
+            if party is None:
                 return jsonify(status="400", message="Incorrect Email or Password")
-            elif not check_password_hash(customer['password'], password):
+            elif not check_password_hash(party['password'], password):
                 return jsonify(status="400", message="Incorrect Email or Password")
             else:
                 vendor_token = ''
 
                 vendor = db.execute(
-                    'SELECT * FROM vendor WHERE id = ?', (customer['vendor_id'],)).fetchone()
+                    'SELECT * FROM vendor WHERE id = ?', (party['vendor_id'],)).fetchone()
 
                 if vendor is not None:
                     vendor_token = 'vendor' + str(vendor['id'])
 
+                theme = db.execute(
+                    'SELECT * FROM theme WHERE party_id = ?', (party['id'],)).fetchone()
+
                 session.clear()
-                session['customer_id'] = 'customer' + str(customer['id'])
-                authenticated.append('customer' + str(customer['id']))
-                return jsonify(status="200", message="Vendor {} logged in.".format(customer['email']), token='customer'+str(customer['id']), colors=[customer['primary_color'], customer['secondary_color'], customer['accent']], alt_token=vendor_token, email=customer['email'])
+                session_id = uuid4()
+                session['party_id'] = session_id
+                authenticated.append(session_id)
+                return jsonify(status="200", message="Party {} logged in.".format(party['email']), token='party'+str(party['id']), colors=[theme['primary_color'], theme['secondary_color'], theme['accent']], alt_token=vendor_token, email=party['email'], first_name=party['first_name'], last_name=party['last_name'], session_id=session_id)
 
     return jsonify(status="500", message="Something went wrong.")
