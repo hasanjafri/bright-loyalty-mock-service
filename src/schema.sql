@@ -32,7 +32,8 @@ CREATE TABLE party (
     password TEXT NOT NULL,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
-    vendor_id INTEGER NOT NULL,
+    vendors TEXT NOT NULL,
+    vendor_id INTEGER,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (vendor_id) REFERENCES vendor (id)
 );

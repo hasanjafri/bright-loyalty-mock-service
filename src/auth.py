@@ -142,6 +142,8 @@ def check_authenticated():
         userType = token[0:-1]
         db = get_db()
 
+        print(token, session_id)
+
         if session_id in authenticated:
             if userType == 'admin':
                 admin = db.execute(
@@ -279,7 +281,11 @@ def register():
                 db.commit()
                 return jsonify(status="200", message="Vendor {} successfully created".format(email))
         elif userType == 'party':
-            vendor_id = data['vendor_id']
+            vendor_id = db.execute(
+                'SELECT * FROM vendor WHERE email = ?', (email,)).fetchone()
+            if not vendor_id:
+                vendor_id = ''
+
             if not email:
                 return jsonify(status="400", message="Email is required")
             elif not password:
@@ -344,6 +350,8 @@ def login():
         password = data['password']
         userType = data['userType']
         db = get_db()
+
+        print(email, password, userType)
 
         if userType == 'admin':
             admin = db.execute(
