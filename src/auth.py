@@ -281,22 +281,18 @@ def register():
                 db.commit()
                 return jsonify(status="200", message="Vendor {} successfully created".format(email))
         elif userType == 'party':
-            vendor_id = db.execute(
+            vendor = db.execute(
                 'SELECT * FROM vendor WHERE email = ?', (email,)).fetchone()
-            if not vendor_id:
-                vendor_id = ''
 
             if not email:
                 return jsonify(status="400", message="Email is required")
             elif not password:
                 return jsonify(status="400", message="Password is required")
-            elif not vendor_id:
-                return jsonify(status="400", message="Vendor ID is required")
             elif db.execute('SELECT id FROM party WHERE email = ?', (email,)).fetchone() is not None:
                 return jsonify(status="409", message="{} is already registered".format(email))
             else:
                 db.execute('INSERT INTO party (email, password, first_name, last_name, vendor_id) VALUES (?, ?, ?, ?, ?)',
-                           (email, generate_password_hash(password), first_name, last_name, vendor_id))
+                           (email, generate_password_hash(password), first_name, last_name, vendor['id']))
                 party = db.execute(
                     'SELECT * FROM party WHERE email = ?', (email,)).fetchone()
                 if party:
