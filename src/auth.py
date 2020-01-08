@@ -319,24 +319,30 @@ def loginAlt():
         userType = data['userType']
         db = get_db()
 
+        print(userType)
+
         if session_id in authenticated:
             if userType == 'admin':
                 return jsonify(status="400", message="Invalid Request for UserType Admin")
-            elif userType == 'vendor':
+            elif userType == 'party':
                 party = db.execute(
                     'SELECT * FROM party WHERE id = ?', (alt_token[-1],)).fetchone()
 
                 if party:
                     theme = db.execute(
                         'SELECT * FROM theme WHERE party_id = ?', (alt_token[-1],)).fetchone()
+                    print(theme['primary_color'],
+                          theme['secondary_color'], theme['accent'])
                     return jsonify(status="200", colors=[theme['primary_color'], theme['secondary_color'], theme['accent']], first_name=party['first_name'], last_name=party['last_name'])
-            elif userType == 'party':
+            elif userType == 'vendor':
                 vendor = db.execute(
                     'SELECT * FROM vendor WHERE id = ?', (alt_token[-1],)).fetchone()
 
                 if vendor:
                     theme = db.execute(
                         'SELECT * FROM theme WHERE vendor_id = ?', (alt_token[-1],)).fetchone()
+                    print(theme['primary_color'],
+                          theme['secondary_color'], theme['accent'])
                     return jsonify(status="200", colors=[theme['primary_color'], theme['secondary_color'], theme['accent']], first_name=vendor['first_name'], last_name=vendor['last_name'])
             else:
                 return jsonify(status="500", message="Something went wrong.")
@@ -366,7 +372,7 @@ def login():
                     'SELECT * FROM theme WHERE admin_id = ?', (admin['id'],)).fetchone()
 
                 session.clear()
-                session_id = uuid4()
+                session_id = str(uuid4())
                 session['admin_id'] = session_id
                 authenticated.append(session_id)
                 return jsonify(status="200", message="Admin {} logged in.".format(admin['email']), token='admin'+str(admin['id']), colors=[theme['primary_color'], theme['secondary_color'], theme['accent']], email=admin['email'], first_name=admin['first_name'], last_name=admin['last_name'], session_id=session_id)
@@ -391,7 +397,7 @@ def login():
                     'SELECT * FROM theme WHERE vendor_id = ?', (vendor['id'],)).fetchone()
 
                 session.clear()
-                session_id = uuid4()
+                session_id = str(uuid4())
                 session['vendor_id'] = session_id
                 authenticated.append(session_id)
                 return jsonify(status="200", message="Vendor {} logged in.".format(vendor['email']), token='vendor'+str(vendor['id']), colors=[theme['primary_color'], theme['secondary_color'], theme['accent']], alt_token=party_token, email=vendor['email'], first_name=vendor['first_name'], last_name=vendor['last_name'], session_id=session_id)
@@ -416,7 +422,7 @@ def login():
                     'SELECT * FROM theme WHERE party_id = ?', (party['id'],)).fetchone()
 
                 session.clear()
-                session_id = uuid4()
+                session_id = str(uuid4())
                 session['party_id'] = session_id
                 authenticated.append(session_id)
                 return jsonify(status="200", message="Party {} logged in.".format(party['email']), token='party'+str(party['id']), colors=[theme['primary_color'], theme['secondary_color'], theme['accent']], alt_token=vendor_token, email=party['email'], first_name=party['first_name'], last_name=party['last_name'], session_id=session_id)
